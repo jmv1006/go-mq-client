@@ -12,13 +12,14 @@ import (
 )
 
 type Consumer struct {
-	Address string
-	Port    int
-	Topic   string
+	Address  string
+	Port     int
+	Topic    string
+	QuitChan chan int
 }
 
-func NewConsumer(address string, port int, topic string) *Consumer {
-	return &Consumer{Address: address, Port: port, Topic: topic}
+func NewConsumer(address string, port int, topic string, quitChan chan int) *Consumer {
+	return &Consumer{Address: address, Port: port, Topic: topic, QuitChan: quitChan}
 }
 
 func (c *Consumer) Consume() (chan Message, error) {
@@ -60,25 +61,30 @@ func (c *Consumer) listen(conn *net.TCPConn, messagesChan chan Message) {
 	initialBuffer := make([]byte, 1000)
 
 	for {
-		buff := bytes.NewBuffer(initialBuffer)
+		select {
+		case <-c.QuitChan:
+			return
+		default:
+			buff := bytes.NewBuffer(initialBuffer)
 
-		written, err := conn.Read(buff.Bytes())
+			written, err := conn.Read(buff.Bytes())
 
-		if err != nil {
-			if err != io.EOF {
-				fmt.Println("read error:", err)
+			if err != nil {
+				if err != io.EOF {
+					fmt.Println("read error:", err)
+				}
+				break
+			} else if written == 1 {
+				//  Bypass the heartbeat check
+				continue
 			}
-			break
-		} else if written == 1 {
-			//  Bypass the heartbeat check
-			continue
-		}
 
-		writtenBytes := buff.Bytes()[:written]
-		msg, err := c.getMessageFromBytes(writtenBytes)
+			writtenBytes := buff.Bytes()[:written]
+			msg, err := c.getMessageFromBytes(writtenBytes)
 
-		if err == nil {
-			messagesChan <- msg
+			if err == nil {
+				messagesChan <- msg
+			}
 		}
 	}
 }
