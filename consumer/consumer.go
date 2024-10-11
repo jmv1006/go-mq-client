@@ -63,7 +63,7 @@ func (c *Consumer) listen(conn *net.TCPConn, messagesChan chan Message) {
 	for {
 		select {
 		case <-c.QuitChan:
-			return
+			close(messagesChan)
 		default:
 			buff := bytes.NewBuffer(initialBuffer)
 
